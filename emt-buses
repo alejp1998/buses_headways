@@ -1,0 +1,25 @@
+[Unit]
+Description=emt-buses
+After=docker.service
+Wants=docker.service
+
+[Service]
+TimeoutStartSec=infinity
+TimeoutStopSec=15
+Restart=always
+RestartSec=2s
+
+ExecStartPre=-/usr/bin/docker stop emt-buses
+ExecStartPre=-/usr/bin/docker rm emt-buses
+
+ExecStart=/usr/bin/docker run --rm --name "emt-buses" \
+-v /home/shared/BusesHeadways/Madrid/:/home/jovyan \
+-v /etc/localtime:/etc/localtime:ro \
+--user 1002:100 \
+--entrypoint "/bin/sh" \
+local/datascience-notebook -c 'python -u Scripts/CollectData/retrieve_data.py'
+
+ExecStop=/usr/bin/docker stop emt-buses
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,15 @@
+__pycache__
+api_credentials.py
+.ipynb_checkpoints
+apps/.ipynb_checkpoints
+buses_data.csv
+buses_data_burst.csv
+Madrid/Data/Raw/*
+London/Data/Raw/*
+Madrid/Data/Processed/*
+London/Data/Processed/*
+Madrid/Notebooks
+London/Notebooks
+Notebooks
+*.swp
+.cache

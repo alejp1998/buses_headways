@@ -1,0 +1,25 @@
+[Unit]
+Description=london-buses
+After=docker.service
+Wants=docker.service
+
+[Service]
+TimeoutStartSec=infinity
+TimeoutStopSec=15
+Restart=always
+RestartSec=2s
+
+ExecStartPre=-/usr/bin/docker stop london-buses
+ExecStartPre=-/usr/bin/docker rm london-buses
+
+ExecStart=/usr/bin/docker run --rm --name "london-buses" \
+-v /home/shared/BusesHeadways/London/:/home/jovyan \
+-v /etc/localtime:/etc/localtime:ro \
+--user 1002:100 \
+--entrypoint "/bin/sh" \
+local/datascience-notebook -c 'python -u Scripts/CollectData/retrieve_data.py'
+
+ExecStop=/usr/bin/docker stop london-buses
+
+[Install]
+WantedBy=multi-user.target
