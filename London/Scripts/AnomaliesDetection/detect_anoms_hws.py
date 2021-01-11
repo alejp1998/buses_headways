@@ -75,6 +75,8 @@ def clean_data(df) :
     # Drop duplicate rows
     df = df.drop_duplicates()
 
+    now = dt.now()
+
     def check_conditions(row) :
         '''
         Checks if every row in the dataframe matchs the conditions
@@ -88,12 +90,12 @@ def clean_data(df) :
 
         # estimateArrive positive values and time remaining lower than 2 hours
         eta_cond = (row.estimateArrive >= 0) & (row.estimateArrive < 7200)
-
-        return eta_cond
+        datetime_cond = (row.datetime.day == now.day)
+        return eta_cond & datetime_cond
 
     #Check conditions in df
     mask = df.apply(check_conditions,axis=1)
-
+    
     #Select rows that match the conditions
     df = df.loc[mask].reset_index(drop=True)
 
@@ -105,15 +107,20 @@ def clean_data(df) :
 def get_headways(int_df,day_type,hour_range,ap_order_dict) :
     rows_list = []
     hour_range = [int(hour) for hour in hour_range.split('-')]
+
+    #Drop duplicate buses keeping the one with lowest estimateArrive
+    int_df = int_df.sort_values('estimateArrive').drop_duplicates('bus', keep='first')
+
     #Burst time
     actual_time = int_df.iloc[0].datetime
 
     #Line
     line = int_df.iloc[0].line
-
+    
+    print(int_df.head())
     #Stops of each line reversed
-    stops1 = lines_dict[str(line)]['1']['stops'][-1::-1]
-    stops2 = lines_dict[str(line)]['2']['stops'][-1::-1]
+    stops1 = lines_dict[str(line)]['1']['stops'][-4:4:-1]
+    stops2 = lines_dict[str(line)]['2']['stops'][-4:4:-1]
 
     #Appearance order buses list
     ap_order_dir1 = ap_order_dict[line]['dir1']
@@ -122,6 +129,7 @@ def get_headways(int_df,day_type,hour_range,ap_order_dict) :
     last_bus_ap2 = ap_order_dict[line]['l_b_ap2']
     bus_cons_ap1 = ap_order_dict[line]['cons_ap1']
     bus_cons_ap2 = ap_order_dict[line]['cons_ap2']
+    
 
     #Process mean times between stops
     tims_bt_stops = times_bt_stops.loc[(times_bt_stops.line == line) & \
@@ -142,6 +150,7 @@ def get_headways(int_df,day_type,hour_range,ap_order_dict) :
         if i == 0 :
             mean_time_to_stop = 0
         elif i == len(stops1) :
+            mean_time_to_stop_1 = mean_time_to_stop
             mean_time_to_stop = 0
             direction = 2
         else :
@@ -150,10 +159,16 @@ def get_headways(int_df,day_type,hour_range,ap_order_dict) :
             if mean_df.shape[0] > 0 :
                 mean_time_to_stop += mean_df.iloc[0].trip_time
             else :
-                break
+                continue
 
         stop_df = int_df.loc[(int_df.stop == stop) & \
                             (int_df.direction == direction)]
+                            
+        if line == 25 :
+            print(stop)
+            print(direction)
+            if stop_df.shape[0] > 0 : 
+                print(stop_df)
 
         #Drop duplicates, recalculate estimateArrive and append to list
         stop_df = stop_df.drop_duplicates('bus',keep='first')
@@ -170,12 +185,23 @@ def get_headways(int_df,day_type,hour_range,ap_order_dict) :
                     buses_out1 += buses_near.bus.unique().tolist()
                 else :
                     buses_out2 += buses_near.bus.unique().tolist()
-
+            
         stop_df.estimateArrive = stop_df.estimateArrive + mean_time_to_stop
         stop_df_list.append(stop_df)
 
+    mean_time_to_stop_2 = mean_time_to_stop
+
     #Concatenate and group them
     stops_df = pd.concat(stop_df_list)
+
+    if line == 25 : 
+        print(stops_df)
+
+    #Eliminate TTLS longer than mean time to go through hole line direction
+    print(mean_time_to_stop_1)
+    print(mean_time_to_stop_2)
+    stops_df = stops_df[(stops_df.direction == 1) & (stops_df.estimateArrive < mean_time_to_stop_1) | \
+                        (stops_df.direction == 2) & (stops_df.estimateArrive < mean_time_to_stop_2)]
 
     #Group by bus and direction
     stops_df = stops_df.groupby(['bus','direction']).mean().sort_values(by=['estimateArrive'])
@@ -185,7 +211,7 @@ def get_headways(int_df,day_type,hour_range,ap_order_dict) :
                             ((stops_df.direction == 2) & (~stops_df.bus.isin(buses_out2))) ]
 
     #Update appearance order lists
-    TH = 3
+    TH = 0
 
     stops_df_dest1 = stops_df[stops_df.direction == 1].sort_values(by=['estimateArrive'])
     if stops_df_dest1.shape[0] > 0 :  
@@ -200,6 +226,7 @@ def get_headways(int_df,day_type,hour_range,ap_order_dict) :
                 if (buses_dest1[i] not in ap_order_dir1) : 
                     #Append to apearance list
                     ap_order_dir1.append(buses_dest1[i])
+
 
         #Update times without appering
         for bus in last_bus_ap1.keys():
@@ -420,7 +447,8 @@ def process_hws_ndim_mh_dist(lines,day_type,hour_range,burst_df,ap_order_dict) :
         
         #Max dimensional model trained
         models = models_params_dict[str(line)][day_type][hour_range]
-        max_dim = models['max_dim']
+        #max_dim = models['max_dim']
+        max_dim = 4
 
         #Process windows dfs
         dim,window_data_points = 1,1
@@ -541,6 +569,7 @@ def build_series_anoms(series_df,windows_df) :
         new_series_df = pd.DataFrame(columns=['line','datetime','dim','m_dist','anom','anom_size'] + bus_names_all + hw_names_all)
 
     series_df = series_df.append(new_series_df, ignore_index=True)
+    series_df = series_df.drop_duplicates(subset=['line','datetime','dim'] + bus_names_all)
 
     return series_df,anomalies_dfs
 
@@ -548,8 +577,8 @@ def build_series_anoms(series_df,windows_df) :
 def clean_series(series_df,anomalies_dfs,now) :
     unique_groups = []
     unique_groups_df = series_df.drop_duplicates(bus_names_all)
-    for i in range(series_df.shape[0]):
-        group = [series_df.iloc[i][bus_names_all[k]] for k in range(12+1)]
+    for i in range(unique_groups_df.shape[0]):
+        group = [unique_groups_df.iloc[i][bus_names_all[k]] for k in range(12+1)]
         unique_groups.append(group)
 
     for group in unique_groups :

@@ -92,7 +92,7 @@ def get_arrival_times(df,threshold) :
     new_df = pd.concat(trips).sort_values(by='datetime',ascending='True')
 
     #Remove duplicate bus arrival times
-    new_df = new_df.drop_duplicates(subset=['id', 'arrival_time'],keep='last')
+    #new_df = new_df.drop_duplicates(subset=['id', 'arrival_time'], keep='last')
 
     #Remove non-useful columns
     new_df = new_df[['line','direction','stop','bus','datetime','estimateArrive','arrival_time']]

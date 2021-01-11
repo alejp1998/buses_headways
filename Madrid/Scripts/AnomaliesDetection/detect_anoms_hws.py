@@ -550,8 +550,8 @@ def build_series_anoms(series_df,windows_df) :
 def clean_series(series_df,anomalies_dfs,now) :
     unique_groups = []
     unique_groups_df = series_df.drop_duplicates(bus_names_all)
-    for i in range(series_df.shape[0]):
-        group = [series_df.iloc[i][bus_names_all[k]] for k in range(8+1)]
+    for i in range(unique_groups_df.shape[0]):
+        group = [unique_groups_df.iloc[i][bus_names_all[k]] for k in range(8+1)]
         unique_groups.append(group)
 
     for group in unique_groups :
@@ -694,7 +694,7 @@ def main():
             #Clean burst df
             burst_df = clean_data(burst_df)
         except :
-            print('\n[MADRID] ---- Last burst of data not found, waiting... -----\n')
+            print('\n[MADRID] ----- Last burst of data not found, waiting... -----\n')
             time.sleep(10)
             continue
         

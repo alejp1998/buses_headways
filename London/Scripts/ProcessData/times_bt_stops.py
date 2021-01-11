@@ -71,8 +71,6 @@ def process_hour_df(line_df,hour) :
                     stops_df = stops_df_all.drop_duplicates(subset=['bus','stop','arrival_time'],keep='first')
                     stops_df = stops_df.sort_values(by=['bus','arrival_time'],ascending=True)
 
-                    times_between_stops = []
-                    api_times_bt_stops = []
 
                     n = 0
                     while n < (stops_df.shape[0]-1) :
