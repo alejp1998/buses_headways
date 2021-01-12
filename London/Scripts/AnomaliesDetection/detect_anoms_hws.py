@@ -117,10 +117,9 @@ def get_headways(int_df,day_type,hour_range,ap_order_dict) :
     #Line
     line = int_df.iloc[0].line
     
-    print(int_df.head())
     #Stops of each line reversed
-    stops1 = lines_dict[str(line)]['1']['stops'][-4:4:-1]
-    stops2 = lines_dict[str(line)]['2']['stops'][-4:4:-1]
+    stops1 = lines_dict[str(line)]['1']['stops'][-2:2:-1]
+    stops2 = lines_dict[str(line)]['2']['stops'][-2:2:-1]
 
     #Appearance order buses list
     ap_order_dir1 = ap_order_dict[line]['dir1']
@@ -163,12 +162,6 @@ def get_headways(int_df,day_type,hour_range,ap_order_dict) :
 
         stop_df = int_df.loc[(int_df.stop == stop) & \
                             (int_df.direction == direction)]
-                            
-        if line == 25 :
-            print(stop)
-            print(direction)
-            if stop_df.shape[0] > 0 : 
-                print(stop_df)
 
         #Drop duplicates, recalculate estimateArrive and append to list
         stop_df = stop_df.drop_duplicates('bus',keep='first')
@@ -194,12 +187,7 @@ def get_headways(int_df,day_type,hour_range,ap_order_dict) :
     #Concatenate and group them
     stops_df = pd.concat(stop_df_list)
 
-    if line == 25 : 
-        print(stops_df)
-
     #Eliminate TTLS longer than mean time to go through hole line direction
-    print(mean_time_to_stop_1)
-    print(mean_time_to_stop_2)
     stops_df = stops_df[(stops_df.direction == 1) & (stops_df.estimateArrive < mean_time_to_stop_1) | \
                         (stops_df.direction == 2) & (stops_df.estimateArrive < mean_time_to_stop_2)]
 
@@ -211,7 +199,10 @@ def get_headways(int_df,day_type,hour_range,ap_order_dict) :
                             ((stops_df.direction == 2) & (~stops_df.bus.isin(buses_out2))) ]
 
     #Update appearance order lists
-    TH = 0
+    if (ap_order_dir1 == []) & (ap_order_dir2 == []) :
+        TH = 0
+    else : 
+        TH = 10
 
     stops_df_dest1 = stops_df[stops_df.direction == 1].sort_values(by=['estimateArrive'])
     if stops_df_dest1.shape[0] > 0 :  
@@ -309,6 +300,20 @@ def get_headways(int_df,day_type,hour_range,ap_order_dict) :
     ap_order_dict[line]['l_b_ap2'] = last_bus_ap2
     ap_order_dict[line]['cons_ap1'] = bus_cons_ap1
     ap_order_dict[line]['cons_ap2'] = bus_cons_ap2
+
+    #print('\nLine {} - Apearance Order Dict'.format(line))
+    
+    #print('\nAp Order List')
+    #print(ap_order_dir1)
+    #print(ap_order_dir2)
+
+    #print('\nConsecutive Disapearances')
+    #print(last_bus_ap1)
+    #print(last_bus_ap2)
+
+    #print('\nConsecutive Apearances')
+    #print(bus_cons_ap1)
+    #print(bus_cons_ap2)
 
     #Calculate time intervals
     if stops_df.shape[0] > 0 :
@@ -764,7 +769,7 @@ def main():
                 time.sleep(120)
 
         last_burst_df = burst_df
-        time.sleep(5)
+        time.sleep(2)
 
 if __name__== "__main__":
     main()

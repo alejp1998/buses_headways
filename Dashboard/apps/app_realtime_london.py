@@ -120,7 +120,7 @@ layout = html.Div(className = '', children = [
     html.Div(id='hidden-div' + location, style={'display':'none'}),
     dcc.Interval(
         id='interval-component' + location,
-        interval=30*1000, # in milliseconds
+        interval=25*1000, # in milliseconds
         n_intervals=0
     )
 ])
@@ -745,7 +745,6 @@ def build_anoms_table(anomalies_df) :
     [Input('interval-component' + location,'n_intervals'),Input('update-button' + location,'n_clicks')]
 )
 def new_interval(n_intervals,n_clicks) :
-
     return [html.H1('Loading',style={'display':'none'})]
 
 # CALLBACK 0b - Title and sliders

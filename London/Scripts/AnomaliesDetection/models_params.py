@@ -189,7 +189,7 @@ def main():
     print('-------------------------------------------------------------------')
     print('Processing models parameters... - {}\n'.format(now))
 
-    models_params_dict = train_models(hws,500)
+    models_params_dict = train_models(hws,1000)
 
     lapsed_seconds = round((dt.now()-now).total_seconds(),3)
     print('\nFinished in {} seconds'.format(lapsed_seconds))
