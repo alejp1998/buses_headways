@@ -130,14 +130,14 @@ def process_day_df(line_df,date) :
                         mean_time_to_stop = 0
                         direction = 2
                     else :
-                        mean_df = tims_bt_stops.loc[(tims_bt_stops.stopA == stop) & \
+                        mean_df = tims_bt_stops.loc[(tims_bt_stops.stopA == int(stop)) & \
                                         (tims_bt_stops.direction == direction)]
                         if mean_df.shape[0] > 0 :
                             mean_time_to_stop += mean_df.iloc[0].trip_time
                         else :
                             continue
 
-                    stop_df = int_df.loc[(int_df.stop == stop) & \
+                    stop_df = int_df.loc[(int_df.stop == int(stop)) & \
                                         (int_df.direction == direction)]
 
                     #Drop duplicates, recalculate estimateArrive and append to list
@@ -421,6 +421,7 @@ def get_headways(df) :
         line_df = df.loc[df.line == line]
         dates = line_df.datetime.dt.date.unique().tolist()
         dfs = (Parallel(n_jobs=num_cores,max_nbytes=None)(delayed(process_day_df)(line_df,date) for date in dates))
+        #dfs = [process_day_df(line_df,dates[0])]
         dfs_list += dfs
 
     #Concatenate dataframes

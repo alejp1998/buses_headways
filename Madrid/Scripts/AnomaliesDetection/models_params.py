@@ -10,6 +10,9 @@ num_cores = multiprocessing.cpu_count()
 
 import json
 
+import scipy
+from scipy import stats
+
 #Day types
 day_type_dict = { #0 = Monday, 1 = Tuesday ...
     'LA' : [0,1,2,3,4], #LABORABLES
