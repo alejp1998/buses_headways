@@ -86,6 +86,9 @@ def get_model_params(df,dim) :
 def calc_line_params(df,line,day_types,hour_ranges,min_points) :
     models_params_dict = {}
     models_params_dict[line] = {}
+
+    #Max dimensional model to train 
+    max_dim = 3
     for day_type in day_types :
         models_params_dict[line][day_type] = {}
         for hour_range in hour_ranges:
@@ -99,11 +102,20 @@ def calc_line_params(df,line,day_types,hour_ranges,min_points) :
                 (df.datetime.dt.hour < hour_range[1])
             ]
 
+            #Mean and standard deviation of the hws split
+            std_val = split_df.headway.std()
+            mean_val = split_df.headway.mean()
+
+            #Remove outliers
+            conf = 0.95
+            ci = stats.norm.interval(conf, loc = mean_val, scale = std_val)
+            split_df = split_df[(split_df.headway > ci[0]) & (split_df.headway < ci[1])]
+
             #Generate ndimensional windows dataframes
             window_data_points = min_points + 1
             dim = 1
             windows_dfs = []
-            while window_data_points > min_points :
+            while (window_data_points > min_points) & (dim <= max_dim) :
                 window_df = get_ndim_hws(split_df,dim)
                 window_data_points = window_df.shape[0]
                 dim += 1
@@ -134,7 +146,7 @@ def train_models(df,min_points):
     models_params_dict = {}
 
     #Locate headways of the last three weeks
-    now = dt.now()
+    #now = dt.now()
     #df = df.loc[df.datetime > (now - timedelta(days=21))]
 
     #Lines to iterate over

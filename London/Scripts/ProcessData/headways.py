@@ -68,12 +68,13 @@ def process_day_df(line_df,date) :
         day_type = 'FE'
 
     #Stops of each line reversed
-    stops1 = lines_dict[str(line)]['1']['stops'][-2:2:-1]
-    stops2 = lines_dict[str(line)]['2']['stops'][-2:2:-1]
+    stops1 = lines_dict[str(line)]['1']['stops'][-3:3:-1]
+    stops2 = lines_dict[str(line)]['2']['stops'][-3:3:-1]
 
     #Appearance order buses list
     ap_order_dir1,ap_order_dir2 = [],[]
-    last_bus_ap1,last_bus_ap2 = {},{}
+    bus_ttls1,bus_ttls2 = {},{}
+    bus_cons_disap1,bus_cons_disap2 = {},{}
     bus_cons_ap1,bus_cons_ap2 = {},{}
 
     rows_list = []
@@ -97,7 +98,7 @@ def process_day_df(line_df,date) :
                 tims_bt_stops = times_bt_stops.loc[(times_bt_stops.line == line) & \
                                                     (times_bt_stops.date.dt.weekday.isin(day_type_dict[day_type])) & \
                                                     (times_bt_stops.st_hour >= last_hour) & \
-                                                    (times_bt_stops.st_hour < last_hour+1)]
+                                                    (times_bt_stops.st_hour < last_hour+2)]
                 #Group and get the mean values
                 tims_bt_stops = tims_bt_stops.groupby(['line','direction','stopA','stopB']).mean()
                 tims_bt_stops = tims_bt_stops.reset_index()[['line','direction','stopA','stopB','trip_time','api_trip_time']]
@@ -156,66 +157,110 @@ def process_day_df(line_df,date) :
                                     (stops_df.direction == 2) & (stops_df.estimateArrive < mean_time_to_stop_2)]
 
                 #Group by bus and direction
-                stops_df = stops_df.groupby(['bus','direction']).mean().sort_values(by=['estimateArrive'])
+                #stops_df = stops_df.groupby(['bus','direction']).mean().sort_values(by=['estimateArrive'])
+                stops_df = stops_df.sort_values(by=['estimateArrive'])
                 stops_df = stops_df.reset_index().drop_duplicates('bus',keep='first')
                 #Loc buses not given by first stop
                 stops_df = stops_df.loc[((stops_df.direction == 1) & (~stops_df.bus.isin(buses_out1))) | \
                                         ((stops_df.direction == 2) & (~stops_df.bus.isin(buses_out2))) ]
 
-                
-                TH = 20
+                #Update appearance order lists
+                if (ap_order_dir1 == []) & (ap_order_dir2 == []) :
+                    TH = 0
+                else : 
+                    TH = 5
+
+                #Set min difference bt last TH TTLSs of a bus to consider it is moving
+                MIN_TTLS_DIFF = 5*TH
 
                 stops_df_dest1 = stops_df[stops_df.direction == 1].sort_values(by=['estimateArrive'])
                 if stops_df_dest1.shape[0] > 0 :  
                     buses_dest1 = stops_df_dest1.bus.tolist()
+                    etas_dest1 = stops_df_dest1.estimateArrive.tolist()
                     for i in range(len(buses_dest1)):
-                        if buses_dest1[i] not in bus_cons_ap1.keys() :
-                            bus_cons_ap1[buses_dest1[i]] = 0
-                        if  buses_dest1[i] not in last_bus_ap1.keys() :
-                            last_bus_ap1[buses_dest1[i]] = 0
+                        if buses_dest1[i] not in bus_ttls1:
+                            bus_ttls1[buses_dest1[i]] = []
+                            bus_ttls1[buses_dest1[i]].append(etas_dest1[i])
+                        elif len(bus_ttls1[buses_dest1[i]]) < TH : 
+                            bus_ttls1[buses_dest1[i]].append(etas_dest1[i])
+                        else : 
+                            bus_ttls1[buses_dest1[i]].pop(0)
+                            bus_ttls1[buses_dest1[i]].append(etas_dest1[i])
 
-                        if bus_cons_ap1[buses_dest1[i]] > TH :
+                        ttls_diff = max(bus_ttls1[buses_dest1[i]]) - min(bus_ttls1[buses_dest1[i]])
+
+                        if buses_dest1[i] not in bus_cons_ap1 :
+                            bus_cons_ap1[buses_dest1[i]] = 0
+                        if  buses_dest1[i] not in bus_cons_disap1 :
+                            bus_cons_disap1[buses_dest1[i]] = 0
+
+                        if (bus_cons_ap1[buses_dest1[i]] > TH) :
                             if (buses_dest1[i] not in ap_order_dir1) : 
                                 #Append to apearance list
-                                ap_order_dir1.append(buses_dest1[i])
-
+                                if i > 0 : 
+                                    bus_bef = buses_dest1[i-1]
+                                    for k in range(len(ap_order_dir1)) : 
+                                        if ap_order_dir1[k] == bus_bef : 
+                                            ap_order_dir1.insert(k+1,buses_dest1[i])
+                                else : 
+                                    ap_order_dir1.insert(0,buses_dest1[i])
+                    
 
                     #Update times without appering
-                    for bus in last_bus_ap1.keys():
+                    for bus in bus_cons_disap1 :
                         if bus not in buses_dest1 :
-                            last_bus_ap1[bus] += 1
+                            bus_cons_disap1[bus] += 1
                             bus_cons_ap1[bus] = 0
-                            if last_bus_ap1[bus] > TH :
+                            if bus_cons_disap1[bus] > TH :
                                 if bus in ap_order_dir1 :
                                     ap_order_dir1.remove(bus)
                         else :
-                            last_bus_ap1[bus] = 0
+                            bus_cons_disap1[bus] = 0
                             bus_cons_ap1[bus] += 1
                 
                 stops_df_dest2 = stops_df[stops_df.direction == 2].sort_values(by=['estimateArrive'])
-                if stops_df_dest2.shape[0] > 0 :  
+                if stops_df_dest2.shape[0] > 0 :
                     buses_dest2 = stops_df_dest2.bus.tolist()
+                    etas_dest2 = stops_df_dest2.estimateArrive.tolist()
                     for i in range(len(buses_dest2)):
-                        if buses_dest2[i] not in bus_cons_ap2.keys() :
-                            bus_cons_ap2[buses_dest2[i]] = 0
-                        if  buses_dest2[i] not in last_bus_ap2.keys() :
-                            last_bus_ap2[buses_dest2[i]] = 0
+                        if buses_dest2[i] not in bus_ttls2:
+                            bus_ttls2[buses_dest2[i]] = []
+                            bus_ttls2[buses_dest2[i]].append(etas_dest2[i])
+                        elif len(bus_ttls2[buses_dest2[i]]) < TH : 
+                            bus_ttls2[buses_dest2[i]].append(etas_dest2[i])
+                        else : 
+                            bus_ttls2[buses_dest2[i]].pop(0)
+                            bus_ttls2[buses_dest2[i]].append(etas_dest2[i])
 
-                        if bus_cons_ap2[buses_dest2[i]] > TH :
+                        ttls_diff = max(bus_ttls2[buses_dest2[i]]) - min(bus_ttls2[buses_dest2[i]])
+
+                        if buses_dest2[i] not in bus_cons_ap2 :
+                            bus_cons_ap2[buses_dest2[i]] = 0
+                        if  buses_dest2[i] not in bus_cons_disap2 :
+                            bus_cons_disap2[buses_dest2[i]] = 0
+
+                        if (bus_cons_ap2[buses_dest2[i]] > TH) :
                             if (buses_dest2[i] not in ap_order_dir2) : 
                                 #Append to apearance list
-                                ap_order_dir2.append(buses_dest2[i])
+                                if i > 0 : 
+                                    bus_bef = buses_dest2[i-1]
+                                    for k in range(len(ap_order_dir2)) : 
+                                        if ap_order_dir2[k] == bus_bef : 
+                                            ap_order_dir2.insert(k+1,buses_dest2[i])
+                                            break
+                                else : 
+                                    ap_order_dir2.insert(0,buses_dest2[i])
 
                     #Update times without appering
-                    for bus in last_bus_ap2.keys():
+                    for bus in bus_cons_disap2 :
                         if bus not in buses_dest2 :
-                            last_bus_ap2[bus] += 1
+                            bus_cons_disap2[bus] += 1
                             bus_cons_ap2[bus] = 0
-                            if last_bus_ap2[bus] > TH :
+                            if bus_cons_disap2[bus] > TH :
                                 if bus in ap_order_dir2 :
                                     ap_order_dir2.remove(bus)
                         else :
-                            last_bus_ap2[bus] = 0
+                            bus_cons_disap2[bus] = 0
                             bus_cons_ap2[bus] += 1
 
                 #Reorder df according to appearance list
@@ -229,7 +274,7 @@ def process_day_df(line_df,date) :
 
                             ap_order_dir1.remove(last_bus1)
                             bus_cons_ap1[last_bus1] = TH + 1
-                            last_bus_ap1[last_bus1] = TH + 1
+                            bus_cons_disap1[last_bus1] = TH + 1
                             break
                         else :
                             rows.append(bus_df.iloc[0])
@@ -245,7 +290,7 @@ def process_day_df(line_df,date) :
                             
                             ap_order_dir2.remove(last_bus2)
                             bus_cons_ap2[last_bus2] = TH + 1
-                            last_bus_ap2[last_bus2] = TH + 1
+                            bus_cons_disap2[last_bus2] = TH + 1
                             break
                         else :
                             rows.append(bus_df.iloc[0])
@@ -254,19 +299,25 @@ def process_day_df(line_df,date) :
 
                 stops_df = pd.DataFrame(rows)
 
-                #print('\nLine {} - Apearance Order Dict'.format(line))
-    
-                #print('\nAp Order List')
-                #print(ap_order_dir1)
-                #print(ap_order_dir2)
+                '''
+                print('\n[LONDON] Line {} - Apearance Order Dict'.format(line))
+                
+                print('\nAp Order List')
+                print(ap_order_dir1)
+                print(ap_order_dir2)
 
-                #print('\nConsecutive Disapearances')
-                #print(last_bus_ap1)
-                #print(last_bus_ap2)
+                print('\nLast TTLSs')
+                print(bus_ttls1)
+                print(bus_ttls2)
+                
+                print('\nConsecutive Disapearances')
+                print(bus_cons_disap1)
+                print(bus_cons_disap2)
 
-                #print('\nConsecutive Apearances')
-                #print(bus_cons_ap1)
-                #print(bus_cons_ap2)
+                print('\nConsecutive Apearances')
+                print(bus_cons_ap1)
+                print(bus_cons_ap2)
+                '''
 
                 #Calculate time intervals
                 if stops_df.shape[0] > 0 :
@@ -334,7 +385,7 @@ def process_day_df(line_df,date) :
             if next_df.shape[0] != 0 :
                 actual_time = next_df.iloc[0].datetime
                 start_interval = actual_time - timedelta(seconds=10)
-                end_interval = actual_time + timedelta(seconds=30)
+                end_interval = actual_time + timedelta(seconds=15)
             else :
                 break
 
@@ -350,14 +401,13 @@ def get_headways(df) :
             Data to process
     '''
     #For every line collected
-    lines = ['18']#,'25']
+    lines = ['18','25']
 
     #Get new dictionaries and process the lines
     dfs_list = []
     for line in lines :
         line_df = df.loc[df.line == int(line)]
-        dates = line_df.datetime.dt.date.unique().tolist()[-8:-5]
-        print(dates)
+        dates = line_df.datetime.dt.date.unique().tolist()
         dfs = (Parallel(n_jobs=num_cores,max_nbytes=None)(delayed(process_day_df)(line_df,date) for date in dates))
         dfs_list += dfs
 

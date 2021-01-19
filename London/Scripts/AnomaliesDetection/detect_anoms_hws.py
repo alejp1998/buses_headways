@@ -104,7 +104,7 @@ def clean_data(df) :
 
 
 #For every burst of data:
-def get_headways(int_df,day_type,hour_range,ap_order_dict) :
+def get_headways(int_df,day_type,hour_range,ap_order_dict,now) :
     rows_list = []
     hour_range = [int(hour) for hour in hour_range.split('-')]
 
@@ -118,14 +118,16 @@ def get_headways(int_df,day_type,hour_range,ap_order_dict) :
     line = int_df.iloc[0].line
     
     #Stops of each line reversed
-    stops1 = lines_dict[str(line)]['1']['stops'][-2:2:-1]
-    stops2 = lines_dict[str(line)]['2']['stops'][-2:2:-1]
+    stops1 = lines_dict[str(line)]['1']['stops'][-3:3:-1]
+    stops2 = lines_dict[str(line)]['2']['stops'][-3:3:-1]
 
     #Appearance order buses list
     ap_order_dir1 = ap_order_dict[line]['dir1']
     ap_order_dir2 = ap_order_dict[line]['dir2']
-    last_bus_ap1 = ap_order_dict[line]['l_b_ap1']
-    last_bus_ap2 = ap_order_dict[line]['l_b_ap2']
+    bus_ttls1 = ap_order_dict[line]['ttls1']
+    bus_ttls2 = ap_order_dict[line]['ttls2']
+    bus_cons_disap1 = ap_order_dict[line]['cons_disap1']
+    bus_cons_disap2 = ap_order_dict[line]['cons_disap2']
     bus_cons_ap1 = ap_order_dict[line]['cons_ap1']
     bus_cons_ap2 = ap_order_dict[line]['cons_ap2']
     
@@ -192,7 +194,8 @@ def get_headways(int_df,day_type,hour_range,ap_order_dict) :
                         (stops_df.direction == 2) & (stops_df.estimateArrive < mean_time_to_stop_2)]
 
     #Group by bus and direction
-    stops_df = stops_df.groupby(['bus','direction']).mean().sort_values(by=['estimateArrive'])
+    #stops_df = stops_df.groupby(['bus','direction']).mean().sort_values(by=['estimateArrive'])
+    stops_df = stops_df.sort_values(by=['estimateArrive'])
     stops_df = stops_df.reset_index().drop_duplicates('bus',keep='first')
     #Loc buses not given by first stop
     stops_df = stops_df.loc[((stops_df.direction == 1) & (~stops_df.bus.isin(buses_out1))) | \
@@ -202,59 +205,99 @@ def get_headways(int_df,day_type,hour_range,ap_order_dict) :
     if (ap_order_dir1 == []) & (ap_order_dir2 == []) :
         TH = 0
     else : 
-        TH = 10
+        TH = 5
+
+    #Set min difference bt last TH TTLSs of a bus to consider it is moving
+    MIN_TTLS_DIFF = 5*TH
 
     stops_df_dest1 = stops_df[stops_df.direction == 1].sort_values(by=['estimateArrive'])
     if stops_df_dest1.shape[0] > 0 :  
         buses_dest1 = stops_df_dest1.bus.tolist()
+        etas_dest1 = stops_df_dest1.estimateArrive.tolist()
         for i in range(len(buses_dest1)):
-            if buses_dest1[i] not in bus_cons_ap1.keys() :
-                bus_cons_ap1[buses_dest1[i]] = 0
-            if  buses_dest1[i] not in last_bus_ap1.keys() :
-                last_bus_ap1[buses_dest1[i]] = 0
+            if buses_dest1[i] not in bus_ttls1:
+                bus_ttls1[buses_dest1[i]] = []
+                bus_ttls1[buses_dest1[i]].append(etas_dest1[i])
+            elif len(bus_ttls1[buses_dest1[i]]) < TH : 
+                bus_ttls1[buses_dest1[i]].append(etas_dest1[i])
+            else : 
+                bus_ttls1[buses_dest1[i]].pop(0)
+                bus_ttls1[buses_dest1[i]].append(etas_dest1[i])
 
-            if bus_cons_ap1[buses_dest1[i]] > TH :
+            ttls_diff = max(bus_ttls1[buses_dest1[i]]) - min(bus_ttls1[buses_dest1[i]])
+
+            if buses_dest1[i] not in bus_cons_ap1 :
+                bus_cons_ap1[buses_dest1[i]] = 0
+            if  buses_dest1[i] not in bus_cons_disap1 :
+                bus_cons_disap1[buses_dest1[i]] = 0
+
+            if (bus_cons_ap1[buses_dest1[i]] > TH) :
                 if (buses_dest1[i] not in ap_order_dir1) : 
                     #Append to apearance list
-                    ap_order_dir1.append(buses_dest1[i])
-
+                    if i > 0 : 
+                        bus_bef = buses_dest1[i-1]
+                        for k in range(len(ap_order_dir1)) : 
+                            if ap_order_dir1[k] == bus_bef : 
+                                ap_order_dir1.insert(k+1,buses_dest1[i])
+                    else : 
+                        ap_order_dir1.insert(0,buses_dest1[i])
+        
 
         #Update times without appering
-        for bus in last_bus_ap1.keys():
+        for bus in bus_cons_disap1 :
             if bus not in buses_dest1 :
-                last_bus_ap1[bus] += 1
+                bus_cons_disap1[bus] += 1
                 bus_cons_ap1[bus] = 0
-                if last_bus_ap1[bus] > TH :
+                if bus_cons_disap1[bus] > TH :
                     if bus in ap_order_dir1 :
                         ap_order_dir1.remove(bus)
             else :
-                last_bus_ap1[bus] = 0
+                bus_cons_disap1[bus] = 0
                 bus_cons_ap1[bus] += 1
     
     stops_df_dest2 = stops_df[stops_df.direction == 2].sort_values(by=['estimateArrive'])
-    if stops_df_dest2.shape[0] > 0 :  
+    if stops_df_dest2.shape[0] > 0 :
         buses_dest2 = stops_df_dest2.bus.tolist()
+        etas_dest2 = stops_df_dest2.estimateArrive.tolist()
         for i in range(len(buses_dest2)):
-            if buses_dest2[i] not in bus_cons_ap2.keys() :
-                bus_cons_ap2[buses_dest2[i]] = 0
-            if  buses_dest2[i] not in last_bus_ap2.keys() :
-                last_bus_ap2[buses_dest2[i]] = 0
+            if buses_dest2[i] not in bus_ttls2:
+                bus_ttls2[buses_dest2[i]] = []
+                bus_ttls2[buses_dest2[i]].append(etas_dest2[i])
+            elif len(bus_ttls2[buses_dest2[i]]) < TH : 
+                bus_ttls2[buses_dest2[i]].append(etas_dest2[i])
+            else : 
+                bus_ttls2[buses_dest2[i]].pop(0)
+                bus_ttls2[buses_dest2[i]].append(etas_dest2[i])
 
-            if bus_cons_ap2[buses_dest2[i]] > TH :
+            ttls_diff = max(bus_ttls2[buses_dest2[i]]) - min(bus_ttls2[buses_dest2[i]])
+
+            if buses_dest2[i] not in bus_cons_ap2 :
+                bus_cons_ap2[buses_dest2[i]] = 0
+            if  buses_dest2[i] not in bus_cons_disap2 :
+                bus_cons_disap2[buses_dest2[i]] = 0
+
+            if (bus_cons_ap2[buses_dest2[i]] > TH) :
                 if (buses_dest2[i] not in ap_order_dir2) : 
                     #Append to apearance list
-                    ap_order_dir2.append(buses_dest2[i])
+                    if i > 0 : 
+                        bus_bef = buses_dest2[i-1]
+                        for k in range(len(ap_order_dir2)) : 
+                            if ap_order_dir2[k] == bus_bef : 
+                                ap_order_dir2.insert(k+1,buses_dest2[i])
+                                break
+                    else : 
+                        ap_order_dir2.insert(0,buses_dest2[i])
 
         #Update times without appering
-        for bus in last_bus_ap2.keys():
+        for bus in bus_cons_disap2 :
             if bus not in buses_dest2 :
-                last_bus_ap2[bus] += 1
+                bus_cons_disap2[bus] += 1
                 bus_cons_ap2[bus] = 0
-                if last_bus_ap2[bus] > TH :
+                if bus_cons_disap2[bus] > TH :
                     if bus in ap_order_dir2 :
                         ap_order_dir2.remove(bus)
             else :
-                last_bus_ap2[bus] = 0
+                bus_cons_disap2[bus] = 0
                 bus_cons_ap2[bus] += 1
 
     #Reorder df according to appearance list
@@ -268,7 +311,7 @@ def get_headways(int_df,day_type,hour_range,ap_order_dict) :
 
                 ap_order_dir1.remove(last_bus1)
                 bus_cons_ap1[last_bus1] = TH + 1
-                last_bus_ap1[last_bus1] = TH + 1
+                bus_cons_disap1[last_bus1] = TH + 1
                 break
             else :
                 rows.append(bus_df.iloc[0])
@@ -284,7 +327,7 @@ def get_headways(int_df,day_type,hour_range,ap_order_dict) :
                 
                 ap_order_dir2.remove(last_bus2)
                 bus_cons_ap2[last_bus2] = TH + 1
-                last_bus_ap2[last_bus2] = TH + 1
+                bus_cons_disap2[last_bus2] = TH + 1
                 break
             else :
                 rows.append(bus_df.iloc[0])
@@ -296,24 +339,32 @@ def get_headways(int_df,day_type,hour_range,ap_order_dict) :
     #Update in dict
     ap_order_dict[line]['dir1'] = ap_order_dir1
     ap_order_dict[line]['dir2'] = ap_order_dir2
-    ap_order_dict[line]['l_b_ap1'] = last_bus_ap1
-    ap_order_dict[line]['l_b_ap2'] = last_bus_ap2
+    ap_order_dict[line]['ttls1'] = bus_ttls1
+    ap_order_dict[line]['ttls2'] = bus_ttls2
+    ap_order_dict[line]['cons_disap1'] = bus_cons_disap1
+    ap_order_dict[line]['cons_disap2'] = bus_cons_disap2
     ap_order_dict[line]['cons_ap1'] = bus_cons_ap1
     ap_order_dict[line]['cons_ap2'] = bus_cons_ap2
 
-    #print('\nLine {} - Apearance Order Dict'.format(line))
+    '''
+    print('\n[LONDON] Line {} - Apearance Order Dict'.format(line))
     
-    #print('\nAp Order List')
-    #print(ap_order_dir1)
-    #print(ap_order_dir2)
+    print('\nAp Order List')
+    print(ap_order_dir1)
+    print(ap_order_dir2)
 
-    #print('\nConsecutive Disapearances')
-    #print(last_bus_ap1)
-    #print(last_bus_ap2)
+    print('\nLast TTLSs')
+    print(bus_ttls1)
+    print(bus_ttls2)
+    
+    print('\nConsecutive Disapearances')
+    print(bus_cons_disap1)
+    print(bus_cons_disap2)
 
-    #print('\nConsecutive Apearances')
-    #print(bus_cons_ap1)
-    #print(bus_cons_ap2)
+    print('\nConsecutive Apearances')
+    print(bus_cons_ap1)
+    print(bus_cons_ap2)
+    '''
 
     #Calculate time intervals
     if stops_df.shape[0] > 0 :
@@ -379,7 +430,7 @@ def get_headways(int_df,day_type,hour_range,ap_order_dict) :
 
     return headways_df,ap_order_dict
 
-def get_ndim_hws (df,dim) :
+def get_ndim_hws (df,dim,now) :
     #Generate names for the columns of the dataframe to be built
     hw_names = ['hw' + str(i) + str(i+1) for i in range(1,dim+1)]
     bus_names = ['bus' + str(i) for i in range(1,dim+2)]
@@ -417,7 +468,7 @@ def get_ndim_hws (df,dim) :
     return pd.DataFrame(columns)
 
 
-def process_hws_ndim_mh_dist(lines,day_type,hour_range,burst_df,ap_order_dict) :
+def process_hws_ndim_mh_dist(lines,day_type,hour_range,burst_df,ap_order_dict,now) :
     windows_dfs,headways_dfs = [],[]
     
     #Read dict
@@ -438,7 +489,7 @@ def process_hws_ndim_mh_dist(lines,day_type,hour_range,burst_df,ap_order_dict) :
 
         #Calculate headways and append them
         if line_df.shape[0] > 0 :
-            headways,ap_order_dict = get_headways(line_df,day_type,hour_range,ap_order_dict)
+            headways,ap_order_dict = get_headways(line_df,day_type,hour_range,ap_order_dict,now)
             headways['line'] = line
             headways_dfs.append(headways)
         else :
@@ -452,13 +503,12 @@ def process_hws_ndim_mh_dist(lines,day_type,hour_range,burst_df,ap_order_dict) :
         
         #Max dimensional model trained
         models = models_params_dict[str(line)][day_type][hour_range]
-        #max_dim = models['max_dim']
-        max_dim = 4
+        max_dim = models['max_dim']
 
         #Process windows dfs
         dim,window_data_points = 1,1
         while (window_data_points > 0) and (dim <= max_dim) :
-            window_df = get_ndim_hws(hws,dim)
+            window_df = get_ndim_hws(hws,dim,now)
             window_data_points = window_df.shape[0]
 
             hw_names = ['hw' + str(i) + str(i+1) for i in range(1,dim+1)]
@@ -520,7 +570,7 @@ def process_hws_ndim_mh_dist(lines,day_type,hour_range,burst_df,ap_order_dict) :
     return headways_df,windows_df,ap_order_dict
 
 
-def build_series_anoms(series_df,windows_df) :
+def build_series_anoms(series_df,windows_df,now) :
     new_series,anomalies_dfs = [],[]
     dims = windows_df.dim.unique().tolist()
     for dim in dims :
@@ -551,7 +601,7 @@ def build_series_anoms(series_df,windows_df) :
                 group_df = group_df.sort_values('datetime',ascending=False)
                 last_size = group_df.iloc[0].anom_size
                 last_time = group_df.iloc[0].datetime
-                seconds_ellapsed = (dt.now() - last_time).total_seconds()
+                seconds_ellapsed = (now - last_time).total_seconds()
 
                 if ((group_now['anom'] == 0) and (last_size > 0)) |  ((group_now['anom'] == 1) and (seconds_ellapsed > 120)):
                     group_now['anom_size'] = 0
@@ -601,7 +651,7 @@ def clean_series(series_df,anomalies_dfs,now) :
 
             seconds_ellapsed = (now - last_time).total_seconds()
 
-            if seconds_ellapsed > 300 :
+            if seconds_ellapsed > 180 :
                 #Delete series from last series df
                 series_df = series_df.loc[~final_cond]
                 
@@ -630,7 +680,9 @@ def detect_anomalies(burst_df,last_burst_df,series_df,ap_order_dict) :
         return None
 
     #Detect day type and hour range from current datetime
-    now = dt.now()
+    now = burst_df.datetime.max()
+    burst_df = burst_df[burst_df.datetime > (now - timedelta(seconds=15))]
+
     #Day type
     if (now.weekday() >= 0) and (now.weekday() <= 4) :
         day_type = 'LA'
@@ -648,10 +700,10 @@ def detect_anomalies(burst_df,last_burst_df,series_df,ap_order_dict) :
             return 'Waiting'
 
     #Process headways and build dimensional dataframes
-    headways_df,windows_df,ap_order_dict = process_hws_ndim_mh_dist(lines,day_type,hour_range,burst_df,ap_order_dict)
+    headways_df,windows_df,ap_order_dict = process_hws_ndim_mh_dist(lines,day_type,hour_range,burst_df,ap_order_dict,now)
 
     #Check for anomalies and update the time series
-    series_df,anomalies_dfs = build_series_anoms(series_df,windows_df)
+    series_df,anomalies_dfs = build_series_anoms(series_df,windows_df,now)
 
     #Delete series from the list that havent appeared in the last 5 minutes
     series_df,anomalies_dfs = clean_series(series_df,anomalies_dfs,now)
@@ -689,8 +741,10 @@ def main():
         ap_order_dict[line] = {
             'dir1': [],
             'dir2': [],
-            'l_b_ap1': {},
-            'l_b_ap2': {},
+            'ttls1': {},
+            'ttls2': {},
+            'cons_disap1': {},
+            'cons_disap2': {},
             'cons_ap1': {},
             'cons_ap2': {}
         }
@@ -730,6 +784,7 @@ def main():
             burst_df.timestamp = burst_df.timestamp.dt.tz_localize(None)
             burst_df['expectedArrival'] = pd.to_datetime(burst_df['expectedArrival'], errors = 'coerce',format='%Y-%m-%dT%H:%M:%S')
             burst_df.expectedArrival = burst_df.expectedArrival.dt.tz_localize(None)
+
             #Clean burst df
             burst_df = clean_data(burst_df)
         except :
