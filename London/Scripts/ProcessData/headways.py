@@ -168,10 +168,10 @@ def process_day_df(line_df,date) :
                 if (ap_order_dir1 == []) & (ap_order_dir2 == []) :
                     TH = 0
                 else : 
-                    TH = 5
+                    TH = 2
 
                 #Set min difference bt last TH TTLSs of a bus to consider it is moving
-                MIN_TTLS_DIFF = 5*TH
+                MIN_TTLS_DIFF = 2*TH
 
                 stops_df_dest1 = stops_df[stops_df.direction == 1].sort_values(by=['estimateArrive'])
                 if stops_df_dest1.shape[0] > 0 :  

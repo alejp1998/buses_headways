@@ -55,6 +55,9 @@ def clean_data(df) :
 
         return line_dest_stop_cond and dist_cond and eta_cond
 
+    # Remove data from more than 2 months ago
+    df = df[df.datetime > df.datetime.max() - timedelta(days = 60)]
+    
     #Check conditions in df
     mask = df.parallel_apply(check_conditions,axis=1)
     #Select rows that match the conditions

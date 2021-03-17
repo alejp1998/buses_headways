@@ -24,6 +24,9 @@ def clean_data(df) :
     # Change column names to the unes used in EMT Algorithms
     df = df.rename(columns={'vehicleId':'bus', 'naptanId':'stop', 'lineId':'line', 'timeToStation':'estimateArrive', 'timestamp':'datetime'})
 
+    # Remove data from more than 2 months ago
+    df = df[df.datetime > df.datetime.max() - timedelta(days = 60)]
+    
     # Drop duplicate rows
     df = df.drop_duplicates()
 
@@ -48,7 +51,7 @@ def clean_data(df) :
     mask = df.parallel_apply(check_conditions,axis=1)
     #Select rows that match the conditions
     df = df.loc[mask].reset_index(drop=True)
-
+    
     #Return cleaned DataFrame
     return df
 

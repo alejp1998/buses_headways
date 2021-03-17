@@ -205,10 +205,10 @@ def get_headways(int_df,day_type,hour_range,ap_order_dict,now) :
     if (ap_order_dir1 == []) & (ap_order_dir2 == []) :
         TH = 0
     else : 
-        TH = 5
+        TH = 2
 
     #Set min difference bt last TH TTLSs of a bus to consider it is moving
-    MIN_TTLS_DIFF = 5*TH
+    MIN_TTLS_DIFF = 2*TH
 
     stops_df_dest1 = stops_df[stops_df.direction == 1].sort_values(by=['estimateArrive'])
     if stops_df_dest1.shape[0] > 0 :  
@@ -806,6 +806,34 @@ def main():
                 #Write new data to files
                 f = '../../Data/'
                 burst_df.to_csv(f+'RealTime/buses_data_burst_cleaned.csv', header = True, index = False)
+
+                try : 
+                    #Read week df
+                    week_df = pd.read_csv(f+'RealTime/buses_data_week_cleaned.csv',
+                        dtype={
+                            'line': 'uint16',
+                            'direction': 'uint16',
+                            'stop': 'str',
+                            'bus': 'str',
+                            'estimateArrive': 'uint16'
+                        }
+                    )[['line','direction','stop','bus','datetime','estimateArrive']]
+                    
+                    #Parse the dates
+                    week_df['datetime'] = pd.to_datetime(week_df['datetime'], errors = 'coerce', format='%Y-%m-%dT%H:%M:%S.%f')
+
+                    #Leave only data belonging to last week 
+                    week_df = week_df[week_df.datetime > (dt.now() - timedelta(days = 7))]
+
+                    #Concat with data of last burst
+                    week_df = pd.concat([week_df,burst_df[['line','direction','stop','bus','datetime','estimateArrive']]])
+
+                    #Sort values by datetime
+                    week_df = week_df.sort_values(by = 'datetime', ascending = True)
+                except : 
+                    week_df = burst_df
+                    
+                week_df.to_csv(f+'RealTime/buses_data_week_cleaned.csv', header = True, index = False)
                 
                 headways_df.to_csv(f+'RealTime/headways_burst.csv', header = True, index = False)
 
