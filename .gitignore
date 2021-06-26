@@ -8,8 +8,5 @@ Madrid/Data/Raw/*
 London/Data/Raw/*
 Madrid/Data/Processed/*
 London/Data/Processed/*
-Madrid/Notebooks
-London/Notebooks
-Notebooks
 *.swp
 .cache
